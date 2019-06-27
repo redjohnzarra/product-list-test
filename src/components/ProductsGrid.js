@@ -179,7 +179,6 @@ class ProductsGrid extends Component {
                 displayAdNumber++;
 
                 const adNumber = this.adNumbers[displayAdNumber];
-                console.log('this.adNumbers', this.adNumbers);
 
                 return (
                   <React.Fragment>
