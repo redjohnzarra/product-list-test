@@ -129,6 +129,11 @@ class ProductsGrid extends Component {
     this.setState(
       {
         sortBy,
+        page: 1,
+        asciiList: [],
+        // eslint-disable-next-line react/no-unused-state
+        asciiListNext: [],
+        loading: true,
       },
       () => {
         this.getProductsByPageWithSort();
