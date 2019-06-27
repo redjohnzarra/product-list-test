@@ -8,6 +8,8 @@ import * as sortValues from '../constants/SortValues';
 import SortGroup from './SortGroup';
 import Product from './Product';
 import AdSection from './AdSection';
+import Loading from './Loading';
+import EndOfCatalogue from './EndOfCatalogue';
 
 const NUMBER_RAND_LIMIT = 1000;
 
@@ -18,23 +20,30 @@ class ProductsGrid extends Component {
     this.state = {
       page: 1,
       sortBy: sortValues.PRICE,
-      limitPerPage: 40,
+      limitPerPage: 15,
       asciiList: [],
+      // eslint-disable-next-line react/no-unused-state
+      asciiListNext: [],
+      loading: false,
+      endOfCatalogue: false,
     };
   }
 
   componentDidMount() {
+    window.addEventListener('scroll', this.handleScroll, true);
     this.headerRandomNumber = this.getHeaderAdImgSrcRandomNumber();
+    this.currentlyFetching = false;
     this.getProductsByPageWithSort();
   }
 
-  getProductsByPageWithSort = (append = false) => {
-    const {
-      page, sortBy, limitPerPage, asciiList,
-    } = this.state;
+  componentWillUnmount() {
+    window.removeEventListener('scroll', this.handleScroll, true);
+  }
+
+  getProductsByPageWithSort = (reserve = false) => {
+    const { page, sortBy, limitPerPage } = this.state;
     if (page === 1) {
       this.adNumbers = [this.headerRandomNumber];
-      console.log('this.adNumbers', this.adNumbers);
     }
 
     axios
@@ -46,18 +55,23 @@ class ProductsGrid extends Component {
         },
       })
       .then((response) => {
-        let data;
         const responseData = response.data;
-        console.log('responseData', responseData);
-        if (append) {
-          data = responseData.push(_.clone(asciiList));
-        } else {
-          data = responseData;
-        }
-
-        this.setState({
-          asciiList: data,
-        });
+        const listStateName = reserve ? 'asciiListNext' : 'asciiList';
+        const nextPage = page + 1;
+        const endOfCatalogue = _.isEmpty(responseData);
+        this.setState(
+          {
+            [listStateName]: responseData,
+            page: nextPage,
+            endOfCatalogue,
+          },
+          () => {
+            this.currentlyFetching = false;
+            if (!reserve) {
+              this.getProductsByPageWithSort(true);
+            }
+          },
+        );
       });
   };
 
@@ -65,6 +79,50 @@ class ProductsGrid extends Component {
     const adSrc = document.getElementsByClassName('ad')[0].src;
     // eslint-disable-next-line radix
     return parseInt(adSrc.split('?r=').pop());
+  };
+
+  handleScroll = () => {
+    if (
+      window.scrollY + window.innerHeight >= document.body.scrollHeight
+      && !this.currentlyFetching
+      // eslint-disable-next-line react/destructuring-assignment
+      && this.state.endOfCatalogue === false
+    ) {
+      // this if statement also behave like the first trial
+      this.fetchMoreData();
+    }
+  };
+
+  fetchMoreData = () => {
+    this.setState(
+      {
+        loading: true,
+      },
+      () => {
+        const self = this;
+        setTimeout(() => {
+          const { asciiList, asciiListNext } = self.state;
+          const currentList = _.clone(asciiList);
+          const nextList = _.clone(asciiListNext);
+          const newList = _.concat(currentList, nextList);
+          const numberOfAdNumbers = Math.floor(newList.length / 19);
+          while (self.adNumbers.length < numberOfAdNumbers) {
+            this.generateAdNumber();
+          }
+
+          self.setState(
+            {
+              asciiList: newList,
+              loading: false,
+            },
+            () => {
+              this.currentlyFetching = true;
+              self.getProductsByPageWithSort(true);
+            },
+          );
+        }, 3000);
+      },
+    );
   };
 
   onChangeSort = (sortBy) => {
@@ -79,23 +137,28 @@ class ProductsGrid extends Component {
   };
 
   generateAdNumber = () => {
-    if (this.adNumbers.length >= NUMBER_RAND_LIMIT) return;
+    // if (this.adNumbers.length >= NUMBER_RAND_LIMIT) return;
 
     const randomNumber = Math.floor(Math.random() * NUMBER_RAND_LIMIT);
     if (this.adNumbers.indexOf(randomNumber) < 0) {
       this.adNumbers.push(randomNumber);
 
-      // eslint-disable-next-line consistent-return
-      return randomNumber;
+      this.setState({
+        // eslint-disable-next-line react/no-unused-state
+        randomNumber, // to reload the state
+      });
     }
 
     this.generateAdNumber();
   };
 
   render() {
-    const { sortBy, asciiList } = this.state;
-
+    const {
+      sortBy, asciiList, loading, endOfCatalogue,
+    } = this.state;
+    let displayAdNumber = 0; // for starting index 0, exclude the header ad number
     return (
+      // eslint-disable-next-line no-return-assign
       <Row className="products-grid">
         <Col md={12} className="sort-container">
           <span>Sorted By: </span>
@@ -107,8 +170,11 @@ class ProductsGrid extends Component {
             {_.map(asciiList, (ascii, idx) => {
               const count = idx + 1;
               if (count % 20 === 0) {
-                // 21 because after 20
-                const adNumber = this.generateAdNumber();
+                // eslint-disable-next-line no-plusplus
+                displayAdNumber++;
+
+                const adNumber = this.adNumbers[displayAdNumber];
+                console.log('this.adNumbers', this.adNumbers);
 
                 return (
                   <React.Fragment>
@@ -120,6 +186,8 @@ class ProductsGrid extends Component {
               return <Product ascii={ascii} />;
             })}
           </Row>
+          {loading ? <Loading /> : null}
+          {endOfCatalogue ? <EndOfCatalogue /> : null}
         </Col>
       </Row>
     );
